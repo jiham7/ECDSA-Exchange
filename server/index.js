@@ -20,14 +20,10 @@ const addresses = [];
 for(let i=0; i<3; i++){
   const key = ec.genKeyPair();
 
-  // Issue is here
   const publicKey = key.getPublic().encode('hex');
-
   const publicKeyX = key.getPublic().x.toString(16);
   const publicKeyY = key.getPublic().y.toString(16);
   const tuple = [publicKeyX, publicKeyY]
-  console.log("X: " + publicKeyX);
-  console.log("Y: " + publicKeyY);
   const privateKey = key.getPrivate().toString(16);
 
   publicKeys[publicKey] = tuple;
@@ -44,16 +40,53 @@ app.get('/balance/:address', (req, res) => {
 });
 
 app.post('/send', (req, res) => {
-  const {sender, recipient, amount} = req.body;
-  balances[sender] -= amount;
-  balances[recipient] = (balances[recipient] || 0) + +amount;
-  res.send({ balance: balances[sender] });
+  console.log("here");
+  console.log(balances);
+  // const {sender, recipient, amount} = req.body;
+  const message = JSON.parse(req.body.message);
+  console.log(message);
+  const msgHash = SHA256(JSON.stringify(message)).toString();
+  const sender = message.sender;
+  if(!(sender in publicKeys)) {
+    throw 'Sender Address is not in the exchange';
+  }
+  const amount = message.amount;
+  const recipient = message.recipient;
+  if(!(recipient in balances)) {
+    throw 'Recipient Address is not in the exchange';
+  }
+  // console.log("sender: ", sender);
+  // console.log("public keys: ", publicKeys);
+  // console.log("x: ", publicKeys[sender]);
+  const publicKey = {
+    x: publicKeys[sender][0],
+    y: publicKeys[sender][1]
+  }
+  const key = ec.keyFromPublic(sender, 'hex');
+  console.log("verify: " + key.verify(msgHash, req.body.signature));
+  if(key.verify(msgHash, req.body.signature)){
+    balances[sender] -= amount;
+    balances[recipient] = (balances[recipient] || 0) + +amount;
+    res.send({ balance: balances[sender] });
+    console.log(balances);
+  }
+  else {
+    throw "Sender is not verified. Transaction canceling";
+  }
+  // const r = req.body.signature.r;
+  // const s = req.body.signature.s;
+
+
+
+  // balances[sender] -= amount;
+  // balances[recipient] = (balances[recipient] || 0) + +amount;
+  // res.send({ balance: balances[sender] });
 });
 
 app.listen(port, () => {
   console.log(`There are currently ${Object.keys(balances).length} public keys.`);
   addresses.forEach(function (item) {
-    console.log(`The address ${item} has balance of ${balances[item]}`);
+    console.log(`The address ${item}, with private key ${keyPair[item]} has balance of ${balances[item]}`);
   });
   console.log(`Listening on port ${port}!`);
 });
